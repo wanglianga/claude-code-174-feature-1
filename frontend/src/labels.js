@@ -10,12 +10,13 @@ export const STATUS = {
   IN_PLAN: { label: '已出方案', type: 'primary' },
   NOTIFIED: { label: '已告知', type: 'primary' },
   STOPPED: { label: '已停用', type: 'danger' },
-  EVACUATED: { label: '已转移', type: 'danger' },
+  EVACUATING: { label: '转移中（未清退）', type: 'danger' },
+  EVACUATED: { label: '已清退转移', type: 'danger' },
   RECTIFYING: { label: '整改中', type: 'warning' },
   PENDING_ACCEPTANCE: { label: '待销号', type: 'success' },
   ACCEPTANCE_FAILED: { label: '验收不通过', type: 'danger' },
   CLOSED: { label: '已销号', type: 'success' },
-  REBOUND: { label: '问题反弹', type: 'danger' },
+  REBOUND: { label: '问题反弹/续办', type: 'danger' },
   REFUSED: { label: '拒绝整改', type: 'info' },
 };
 
@@ -43,6 +44,35 @@ export const ISSUE_TYPES = {
   TENANT_REFUSE: '租户不愿搬离',
   ACCEPTANCE_FAIL: '验收不通过',
   REBOUND: '复查发现问题反弹',
+  PERSON_RETURN: '整改期间擅自返回/偷营业',
+  EVACUATION_INCOMPLETE: '人员未全部清退',
+};
+
+export const PERSON_ROLE = {
+  OWNER: '户主/家庭成员',
+  RESIDENT: '常住人员',
+  TENANT: '租户',
+  OPERATOR: '经营者',
+  EMPLOYEE: '经营从业人员',
+};
+
+export const PERSON_MOVE = {
+  REGISTERED: { label: '已登记待核对', type: 'info' },
+  RESETTLED: { label: '已离开并安置', type: 'success' },
+  STILL_ON_SITE: { label: '仍在现场', type: 'danger' },
+  RETURNED: { label: '擅自返回', type: 'danger' },
+};
+
+export const ALLOWANCE_TYPE = {
+  RESETTLEMENT: '安置补助',
+  BUSINESS_LOSS: '经营损失补偿',
+};
+
+export const ALLOWANCE_STATUS = {
+  APPLIED: { label: '已申请待核定', type: 'warning' },
+  APPROVED: { label: '已核定（销号后拨付）', type: 'primary' },
+  REJECTED: { label: '核定未通过', type: 'danger' },
+  PAID: { label: '已拨付', type: 'success' },
 };
 
 export const ISSUE_STATUS = {

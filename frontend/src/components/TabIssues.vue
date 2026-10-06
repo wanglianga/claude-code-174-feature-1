@@ -35,7 +35,7 @@
     </el-row>
 
     <el-card shadow="never" style="margin-top:12px">
-      <template #header>异常事件（7类）</template>
+      <template #header>异常事件（9类）</template>
       <el-table :data="archive.issues" size="small" border>
         <el-table-column label="类型" width="140">
           <template #default="{ row }">

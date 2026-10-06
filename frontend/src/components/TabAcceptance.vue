@@ -41,8 +41,9 @@
     <el-card shadow="never" style="margin-top:12px">
       <template #header>销号与复查</template>
       <div v-if="archive.close">
-        <el-tag type="success">已销号 {{ fmtDate(archive.close.closedAt) }}</el-tag>
-        <span style="margin-left:8px">{{ archive.close.remark }}</span>
+        <el-tag v-if="archive.close.revoked" type="danger">原销号已撤销 {{ fmtDate(archive.close.revokedAt) }}</el-tag>
+        <el-tag v-else type="success">已销号 {{ fmtDate(archive.close.closedAt) }}</el-tag>
+        <span style="margin-left:8px">{{ archive.close.revoked ? archive.close.revokeReason : archive.close.remark }}</span>
       </div>
       <el-alert v-if="auth.isCounty && archive.house?.status==='PENDING_ACCEPTANCE'" type="success" :closable="false" show-icon
         title="最新验收已通过，可由县级主管部门销号（销号后系统准许转移人员返回）" style="margin:8px 0" />
@@ -55,8 +56,11 @@
       <el-divider v-if="archive.close">销号后复查（问题反弹自动重新纳入治理）</el-divider>
       <el-table v-if="archive.rechecks?.length" :data="archive.rechecks" size="small" border>
         <el-table-column label="复查时间" width="170"><template #default="{row}">{{ fmtDate(row.checkedAt) }}</template></el-table-column>
+        <el-table-column label="环节" width="110">
+          <template #default="{row}"><el-tag size="small" :type="row.phase==='POST_CLOSE'?'success':'warning'">{{ row.phase==='POST_CLOSE'?'销号后复查':'整改期核查' }}</el-tag></template>
+        </el-table-column>
         <el-table-column label="结论" width="110">
-          <template #default="{row}"><el-tag size="small" :type="row.result==='PASS'?'success':'danger'">{{ row.result==='PASS'?'保持销号':'问题反弹' }}</el-tag></template>
+          <template #default="{row}"><el-tag size="small" :type="row.result==='PASS'?'success':'danger'">{{ row.result==='PASS'?'无异常/保持销号':'反弹/偷返续办' }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="reboundNotes" label="情况" />
       </el-table>

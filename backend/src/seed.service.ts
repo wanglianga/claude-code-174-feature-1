@@ -9,7 +9,10 @@ import {
   ItemStatus,
   IssueStatus,
   IssueType,
+  PersonMoveStatus,
+  PersonRole,
   RiskLevel,
+  Shelter,
   Stakeholder,
   Stance,
   StakeholderType,
@@ -25,6 +28,7 @@ export class SeedService implements OnApplicationBootstrap {
   constructor(
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(ConstructionTeam) private teams: Repository<ConstructionTeam>,
+    @InjectRepository(Shelter) private shelterRepo: Repository<Shelter>,
     private svc: AppService,
   ) {}
 
@@ -105,6 +109,17 @@ export class SeedService implements OnApplicationBootstrap {
     );
     const teamUser = await this.mkUser('team1', '钱工（安泰施工队）', UserRole.TEAM, undefined, teamA.id);
 
+    // ---------- 安置点 ----------
+    const shelterXK = await this.shelterRepo.save(
+      this.shelterRepo.create({ name: '溪口村部安置点', township: '溪口镇', address: '溪口村党群服务中心', capacity: 60, contact: '何会计', phone: '13800003001' }),
+    );
+    const shelterYL = await this.shelterRepo.save(
+      this.shelterRepo.create({ name: '大岭村集中安置点', township: '云岭乡', address: '大岭村老学校改造安置点', capacity: 40, contact: '林管理员', phone: '13800003002' }),
+    );
+    await this.shelterRepo.save(
+      this.shelterRepo.create({ name: '青山镇避灾安置中心', township: '青山镇', address: '青山镇民政楼一层', capacity: 120, contact: '马主任', phone: '13800003003' }),
+    );
+
     // ---------- 房屋A：全流程已销号，补助已发，复查通过 ----------
     {
       const insp = await this.svc.createInspection(grid1, {
@@ -135,6 +150,13 @@ export class SeedService implements OnApplicationBootstrap {
       await this.svc.createEvacuation(grid1, {
         houseId, residents: 5, destination: '溪口村部安置点',
         remark: '2户投亲，3人居村部安置点，发放生活物资',
+        persons: [
+          { name: '王德福', role: PersonRole.OWNER, shelterName: '溪口村部安置点', settledFrom: this.dateStr(-10), photos: ['/uploads/demo-evac-1.jpg'] },
+          { name: '王德福配偶', role: PersonRole.OWNER, shelterName: '溪口村部安置点', settledFrom: this.dateStr(-10), photos: ['/uploads/demo-evac-2.jpg'] },
+          { name: '王母（82岁）', role: PersonRole.OWNER, shelterName: '投亲靠友（女儿家）', settledFrom: this.dateStr(-10), photos: ['/uploads/demo-evac-3.jpg'] },
+          { name: '刘军', role: PersonRole.TENANT, shelterName: '溪口村部安置点', settledFrom: this.dateStr(-9), photos: ['/uploads/demo-evac-4.jpg'] },
+          { name: '刘军配偶', role: PersonRole.TENANT, shelterName: '溪口村部安置点', settledFrom: this.dateStr(-9), photos: ['/uploads/demo-evac-5.jpg'] },
+        ],
       });
       await this.svc.upsertFamily(houseId, {
         difficultyType: DifficultyType.LOW_INCOME,
@@ -416,6 +438,99 @@ export class SeedService implements OnApplicationBootstrap {
         houseId, result: AcceptanceResult.FAIL, wallCrack: 2,
         reboundNotes: '复查发现原加固墙体旁出现新贯通裂缝，疑似相邻新建房施工影响，问题反弹',
       });
+    }
+
+    // ---------- 房屋G：经营+居住，登记6人仅5人确认离开；整改期间经营者偷返，同事件续办 ----------
+    {
+      const insp = await this.svc.createInspection(grid2, {
+        code: 'NF-YL-000007',
+        township: '云岭乡', village: '大岭村', address: '大岭村三岔路口2号',
+        ownerName: '周小满', ownerPhone: '13811110007',
+        buildYear: 1999, floors: 3, usage: '餐饮+自住', isBusiness: true, isRented: true,
+        isAddedFloor: true, wallCrack: 2, roofLeak: 1, foundationSettlement: 1, residents: 6,
+        notes: '一楼饭馆、二楼自住、三楼加层；承重墙严重斜裂缝，地基明显沉降，共6人（含经营者与租户）',
+      });
+      const houseId = insp.house.id;
+      const plan = await this.svc.createReview(town2, {
+        inspectionId: insp.inspection.id,
+        decision: RiskLevel.EVACUATE,
+        requirement: '立即停止经营并全员转移，拆除三楼加层，加固承重墙，验收销号并经准许后方可复营业。',
+        deadline: this.dateStr(30),
+        items: [
+          { type: 'REMOVE_ILLEGAL_FLOOR', description: '拆除三楼加建部分约80㎡' },
+          { type: 'REINFORCE_WALL', description: '一、二层承重墙钢筋网抹面加固' },
+          { type: 'EVICT_TENANTS', description: '停止饭馆经营，6名人员全部转移清退' },
+          { type: 'SET_WARNING', description: '饭馆门口设置围挡与危房警示' },
+        ],
+      });
+      await this.svc.createNotice(grid2, {
+        houseId, method: '书面送达', notifiedTo: ['户主周小满', '经营者（周小满之子周凯）', '二楼租户'],
+        acknowledged: true,
+        content: '评定为紧急转移等级，须全员撤离、停业整改，擅自返回将依法处置',
+      });
+
+      // 建立6人转移清册
+      await this.svc.registerRoster(grid2, houseId, {
+        persons: [
+          { name: '周小满', role: PersonRole.OWNER },
+          { name: '周小满配偶', role: PersonRole.OWNER },
+          { name: '周凯（经营者）', role: PersonRole.OPERATOR },
+          { name: '饭馆帮工吴姐', role: PersonRole.EMPLOYEE },
+          { name: '租户老陈', role: PersonRole.TENANT },
+          { name: '租户老陈配偶', role: PersonRole.TENANT },
+        ],
+      });
+
+      // 网格员现场逐人核对：5人离开并安置（含安置点、起始日期、照片），经营者周凯仍在现场继续经营
+      const arc0 = await this.svc.houseArchive(houseId);
+      const byName = Object.fromEntries(arc0.evacPersons.map((p: any) => [p.name, p]));
+      const leave = (name: string, dest: string, day: number) =>
+        this.svc.verifyRosterPerson(grid2, byName[name].id, {
+          moveStatus: PersonMoveStatus.RESETTLED,
+          shelterName: dest,
+          settledFrom: this.dateStr(day),
+          photos: [`/uploads/demo-g-${name}.jpg`],
+        });
+      await leave('周小满', '大岭村集中安置点', -8);
+      await leave('周小满配偶', '大岭村集中安置点', -8);
+      await leave('饭馆帮工吴姐', '大岭村集中安置点', -8);
+      await leave('租户老陈', '投亲靠友', -7);
+      await leave('租户老陈配偶', '投亲靠友', -7);
+      await this.svc.verifyRosterPerson(grid2, byName['周凯（经营者）'].id, {
+        moveStatus: PersonMoveStatus.STILL_ON_SITE,
+        continueBusiness: true,
+        photos: ['/uploads/demo-g-zhoukai-onsite.jpg'],
+        remark: '饭馆仍在晚间偷偷接单营业，人员未离开',
+      });
+
+      // 户主材料齐全，提交安置补助/经营损失申请并由乡镇核定（保留申请、核定通过，拨付待销号）
+      await this.svc.upsertFamily(houseId, {
+        difficultyType: DifficultyType.LOW_INCOME,
+        difficultyProof: ['/uploads/demo-dibao-g.jpg'],
+        ownershipProof: ['/uploads/demo-quanshu-g.jpg'],
+        ownerConsent: true,
+        membersNote: '户主低保，饭馆为全家唯一收入来源，经营者为其子',
+      });
+      await this.svc.applyAllowance(farmer2, houseId, {
+        type: 'RESETTLEMENT', amount: 6000,
+        basis: '5人已安置×30天×40元/人天=6000元（经营者尚未离场，暂不计入）',
+        proof: ['/uploads/demo-anzhi.jpg'],
+      });
+      await this.svc.applyAllowance(farmer2, houseId, {
+        type: 'BUSINESS_LOSS', amount: 9000,
+        basis: '饭馆停业30天，核定日损失约300元×30天=9000元',
+        proof: ['/uploads/demo-yingye.jpg'],
+      });
+      const allowances = await this.svc.listAllowances(houseId);
+      for (const al of allowances) {
+        await this.svc.reviewAllowance(town2, al.id, { approved: true, approvedAmount: Number(al.amount), comment: '情况属实，核定通过，全员转移销号后拨付' });
+      }
+
+      // 施工队已确定但无法开工/无法销号（硬闸口），档案停在“转移中（未清退）”
+      void plan;
+
+      // —— 演练：经营者被劝离后6人全员清退、开工整改；整改期间又偷返，网格员现场核查按原事件续办 ——
+      // （为保证演示台账同时保留“6登5离”现场，以上未清退状态不覆盖；续办演练在验证脚本中动态执行）
     }
 
     void teamB;

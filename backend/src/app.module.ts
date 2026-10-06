@@ -5,12 +5,14 @@ import { APP_GUARD } from '@nestjs/core';
 import {
   Acceptance,
   AcceptanceItemResult,
+  AllowanceRecord,
   BudgetItem,
   CloseRecord,
   ConstructionLog,
   ConstructionPlan,
   ConstructionTeam,
   Consultation,
+  EvacuationPerson,
   EvacuationRecord,
   FamilyProfile,
   House,
@@ -21,6 +23,7 @@ import {
   RectificationItem,
   RecheckRecord,
   ReviewPlan,
+  Shelter,
   Stakeholder,
   SubsidyApplication,
   User,
@@ -35,7 +38,7 @@ const entities = [
   User, House, Inspection, ReviewPlan, RectificationItem, NoticeRecord, EvacuationRecord,
   Stakeholder, Consultation, IssueRecord, FamilyProfile, ConstructionTeam, ConstructionPlan,
   BudgetItem, SubsidyApplication, ConstructionLog, Acceptance, AcceptanceItemResult,
-  CloseRecord, RecheckRecord, HouseActivity,
+  CloseRecord, RecheckRecord, HouseActivity, Shelter, EvacuationPerson, AllowanceRecord,
 ];
 
 @Module({

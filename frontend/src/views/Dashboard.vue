@@ -69,6 +69,50 @@
     <el-row :gutter="14" style="margin-top:14px">
       <el-col :span="12">
         <el-card shadow="never">
+          <template #header>人员转移清册现场核对（逐人核对，未全员离开不得清退）</template>
+          <el-descriptions :column="2" size="small" border>
+            <el-descriptions-item label="应紧急转移房屋">{{ d.evacuation?.housesRequiring ?? 0 }} 栋</el-descriptions-item>
+            <el-descriptions-item label="全员已清退房屋">
+              <b style="color:#67c23a">{{ d.evacuation?.housesFullyCleared ?? 0 }} 栋</b>
+            </el-descriptions-item>
+            <el-descriptions-item label="部分未清退房屋">
+              <b style="color:#f56c6c">{{ d.evacuation?.housesPartial ?? 0 }} 栋</b>
+            </el-descriptions-item>
+            <el-descriptions-item label="偷返续办房屋">
+              <b style="color:#f56c6c">{{ d.evacuation?.housesReturned ?? 0 }} 栋</b>
+            </el-descriptions-item>
+            <el-descriptions-item label="登记 / 已安置人员">
+              {{ d.evacuation?.personsRegistered ?? 0 }} / {{ d.evacuation?.personsResettled ?? 0 }} 人
+            </el-descriptions-item>
+            <el-descriptions-item label="仍在现场 / 擅自返回">
+              <span style="color:#f56c6c">{{ (d.evacuation?.personsStillOnSite ?? 0) + (d.evacuation?.personsReturned ?? 0) }} 人</span>
+              （继续经营 {{ d.evacuation?.continuingBusiness ?? 0 }} 人）
+            </el-descriptions-item>
+          </el-descriptions>
+          <div class="section-hint">登记6人只确认5人离开时，房屋保持“转移中（未清退）”，开工、验收、销号与各类资金拨付一并停在对应环节。</div>
+        </el-card>
+      </el-col>
+      <el-col :span="12">
+        <el-card shadow="never">
+          <template #header>安置补助 · 经营损失补偿拨付监督</template>
+          <el-descriptions :column="1" size="small" border>
+            <el-descriptions-item label="已申请待核定">{{ d.allowanceSummary?.applied ?? 0 }} 笔</el-descriptions-item>
+            <el-descriptions-item label="已核定（待销号后拨付）">{{ d.allowanceSummary?.approved ?? 0 }} 笔</el-descriptions-item>
+            <el-descriptions-item label="核定未通过">{{ d.allowanceSummary?.rejected ?? 0 }} 笔</el-descriptions-item>
+            <el-descriptions-item label="已拨付">{{ d.allowanceSummary?.paid ?? 0 }} 笔</el-descriptions-item>
+            <el-descriptions-item label="累计已拨付">
+              <b class="money">¥{{ (d.allowanceSummary?.paidAmount || 0).toLocaleString() }}</b>
+              <span class="section-hint">（安置 ¥{{ d.allowanceSummary?.resettlementPaid || 0 }}，经营损失 ¥{{ d.allowanceSummary?.businessPaid || 0 }}）</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <div class="section-hint">申请可保留、乡镇可核定，但必须全员转移且销号结论有效（未被偷返/反弹撤销）才允许拨付。</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="14" style="margin-top:14px">
+      <el-col :span="12">
+        <el-card shadow="never">
           <template #header>分乡镇治理进度</template>
           <el-table :data="townshipRows" size="small" border>
             <el-table-column prop="township" label="乡镇" />
@@ -85,7 +129,7 @@
       </el-col>
       <el-col :span="12">
         <el-card shadow="never">
-          <template #header>基层协商成本：异常事件处置（7类）</template>
+          <template #header>基层协商成本：异常事件处置（9类）</template>
           <el-table :data="issueRows" size="small" border>
             <el-table-column label="异常类型">
               <template #default="{ row }">{{ ISSUE_TYPES[row.k] }}</template>

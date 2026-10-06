@@ -75,6 +75,75 @@ export class AppController {
     return this.svc.createEvacuation(req.user, body);
   }
 
+  // ---------- 人员转移清册：安置点 / 登记 / 网格员现场逐人核对 ----------
+  @Get('shelters')
+  listShelters(@Query('township') township?: string) {
+    return this.svc.listShelters(township);
+  }
+
+  @Post('shelters')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  createShelter(@Body() body: any) {
+    return this.svc.createShelter(body);
+  }
+
+  @Post('houses/:id/roster')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  registerRoster(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.registerRoster(req.user, id, body || {});
+  }
+
+  @Post('evacuation-persons/:id/verify')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  verifyRosterPerson(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.verifyRosterPerson(req.user, id, body || {});
+  }
+
+  // 整改期间现场核查（同一事件续办，不新建记录；发现偷返/偷营业则撤销旧销号）
+  @Post('rechecks/during')
+  @Roles(UserRole.GRID_WORKER, UserRole.ACCEPTOR, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  recheckDuring(@Body() body: any, @Req() req: any) {
+    return this.svc.duringRectificationRecheck(req.user, body);
+  }
+
+  // 偷返人员劝回后的再次现场核对与办结
+  @Post('issues/:id/return-resolved')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  resolveReturn(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.resolveReturnAndReverify(req.user, id, body || {});
+  }
+
+  // ---------- 安置补助 / 经营损失 ----------
+  @Get('houses/:id/allowances')
+  listAllowances(@Param('id') id: string) {
+    return this.svc.listAllowances(id);
+  }
+
+  @Post('houses/:id/allowances')
+  @Roles(UserRole.FARMER, UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  applyAllowance(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.applyAllowance(req.user, id, body || {});
+  }
+
+  @Post('allowances/:id/review')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  reviewAllowance(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.reviewAllowance(req.user, id, body || {});
+  }
+
+  @Post('allowances/:id/pay')
+  @Roles(UserRole.COUNTY_ADMIN)
+  payAllowance(@Param('id') id: string, @Req() req: any) {
+    return this.svc.payAllowance(req.user, id);
+  }
+
+  // ---------- 准许复营业（销号有效后方可）----------
+  @Post('houses/:id/resume-business')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  resumeBusiness(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.approveResumeBusiness(req.user, id, body || {});
+  }
+
   // ---------- 利益相关方 / 协商 / 异常 ----------
   @Post('houses/:id/stakeholders')
   @Roles(...ALL_STAFF)

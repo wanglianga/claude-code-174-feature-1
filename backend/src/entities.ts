@@ -30,13 +30,22 @@ export enum HouseStatus {
   IN_PLAN = 'IN_PLAN', // 已复核/方案中
   NOTIFIED = 'NOTIFIED', // 已告知
   STOPPED = 'STOPPED', // 已停用
-  EVACUATED = 'EVACUATED', // 已转移
+  EVACUATING = 'EVACUATING', // 转移中（清册已登记但未全员确认离开，不得清退）
+  EVACUATED = 'EVACUATED', // 已转移（全员清退）
   RECTIFYING = 'RECTIFYING', // 整改中
   PENDING_ACCEPTANCE = 'PENDING_ACCEPTANCE', // 待验收
   ACCEPTANCE_FAILED = 'ACCEPTANCE_FAILED', // 验收不通过
   CLOSED = 'CLOSED', // 已销号
   REBOUND = 'REBOUND', // 复查反弹/重新治理
   REFUSED = 'REFUSED', // 农户拒绝整改
+}
+
+// 转移清册现场核对后的整体清退状态
+export enum EvacuationState {
+  NONE = 'NONE', // 未建立转移清册
+  PARTIAL = 'PARTIAL', // 登记N人，确认离开M<N（含仍在现场继续经营/居住）
+  FULL = 'FULL', // 全员已离开并安置
+  RETURNED = 'RETURNED', // 整改期间有人擅自返回
 }
 
 export enum ItemType {
@@ -63,6 +72,8 @@ export enum IssueType {
   TENANT_REFUSE = 'TENANT_REFUSE', // 租户不愿搬离
   ACCEPTANCE_FAIL = 'ACCEPTANCE_FAIL', // 验收不通过
   REBOUND = 'REBOUND', // 复查发现问题反弹
+  PERSON_RETURN = 'PERSON_RETURN', // 整改期间人员擅自返回/偷偷继续经营
+  EVACUATION_INCOMPLETE = 'EVACUATION_INCOMPLETE', // 人员未全部清退（登记人数与现场核对不符）
 }
 
 export enum IssueStatus {
@@ -101,6 +112,35 @@ export enum SubsidyStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   PAID = 'PAID',
+}
+
+// ---------- 转移人员清册：单人状态 ----------
+export enum PersonMoveStatus {
+  REGISTERED = 'REGISTERED', // 已登记应转移，现场尚未确认离开
+  RESETTLED = 'RESETTLED', // 现场确认已离开并入住安置点
+  STILL_ON_SITE = 'STILL_ON_SITE', // 现场核对：仍在房屋内（继续居住/经营）
+  RETURNED = 'RETURNED', // 整改期间擅自返回
+}
+
+export enum PersonRole {
+  OWNER = 'OWNER', // 户主/家庭成员
+  RESIDENT = 'RESIDENT', // 常住人员
+  TENANT = 'TENANT', // 租户
+  OPERATOR = 'OPERATOR', // 经营者
+  EMPLOYEE = 'EMPLOYEE', // 经营从业人员
+}
+
+// ---------- 安置补助/经营损失：类型与状态 ----------
+export enum AllowanceType {
+  RESETTLEMENT = 'RESETTLEMENT', // 安置补助（按人天/户）
+  BUSINESS_LOSS = 'BUSINESS_LOSS', // 经营损失补偿
+}
+
+export enum AllowanceStatus {
+  APPLIED = 'APPLIED', // 已申请，保留待审
+  APPROVED = 'APPROVED', // 乡镇核定通过（仍须销号后拨付）
+  REJECTED = 'REJECTED',
+  PAID = 'PAID', // 已拨付
 }
 
 export enum AcceptanceResult {
@@ -183,6 +223,14 @@ export class House {
   ruleReasons: string[]; // 最新风险判定依据
   @Column({ default: false })
   stopUseConfirmed: boolean; // 是否已确认停用（封停/警示核查）
+  @Column({ default: false })
+  fullEvacuationConfirmed: boolean; // 转移清册全员是否已现场确认离开（部分确认时为false，不得清退）
+  @Column({ default: false })
+  businessClosed: boolean; // 经营场所是否已停止营业
+  @Column({ default: false })
+  resumeBusinessApproved: boolean; // 是否经乡镇/县级准许复营业
+  @Column({ type: 'timestamptz', nullable: true })
+  resumeBusinessAt: Date; // 准许复营业时间
   @CreateDateColumn()
   createdAt: Date;
 }
@@ -608,6 +656,14 @@ export class CloseRecord {
   confirmedStopUseLifted: boolean; // 停用措施按方案解除/房屋安全恢复确认
   @Column({ default: false })
   confirmedAllItems: boolean; // 整改项逐条完成
+  @Column({ default: false })
+  revoked: boolean; // 销号是否被撤销（整改期间/销号后复查发现反弹，旧销号失效）
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date;
+  @Column({ nullable: true })
+  revokedById: string;
+  @Column({ type: 'text', nullable: true })
+  revokeReason: string;
   @Column({ type: 'text', nullable: true })
   remark: string;
 }
@@ -619,10 +675,18 @@ export class RecheckRecord {
   id: string;
   @Column()
   houseId: string;
+  @Column({ type: 'varchar', length: 24, default: 'POST_CLOSE' })
+  phase: string; // POST_CLOSE 销号后复查 / DURING_RECTIFICATION 整改期间现场核查（同一事件续办）
   @Column({ type: 'varchar', length: 8 })
-  result: AcceptanceResult; // PASS 保持销号 / FAIL 问题反弹
+  result: AcceptanceResult; // PASS 保持销号/现场无异常 / FAIL 问题反弹或发现偷返经营
   @Column({ type: 'text', nullable: true })
   reboundNotes: string;
+  @Column({ type: 'simple-json', nullable: true })
+  photos: string[]; // 现场核查照片
+  @Column({ type: 'int', nullable: true })
+  foundOnSite: number; // 现场发现仍在房屋内的人数
+  @Column({ default: false })
+  foundOperating: boolean; // 现场是否发现仍在/擅自恢复经营
   @Column({ type: 'int', nullable: true })
   wallCrack: number;
   @Column({ type: 'int', nullable: true })
@@ -633,6 +697,8 @@ export class RecheckRecord {
   checkedAt: Date;
   @Column()
   inspectorId: string;
+  @Column({ nullable: true })
+  inspectorName: string;
 }
 
 // ---------- 档案活动时间线 ----------
@@ -652,6 +718,101 @@ export class HouseActivity {
   operatorId: string;
   @Column({ nullable: true })
   operatorName: string;
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+// ---------- 安置点 ----------
+@Entity('shelters')
+export class Shelter {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+  @Column()
+  name: string; // 安置点名称（溪口村部安置点等）
+  @Column({ nullable: true })
+  township: string; // 所属乡镇
+  @Column({ nullable: true })
+  address: string;
+  @Column({ nullable: true })
+  contact: string; // 联系人
+  @Column({ nullable: true })
+  phone: string;
+  @Column({ type: 'int', default: 0 })
+  capacity: number; // 可容纳人数
+}
+
+// ---------- 转移人员清册（一人一行，网格员现场核对）----------
+@Entity('evacuation_persons')
+export class EvacuationPerson {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+  @Column()
+  houseId: string;
+  @Column()
+  name: string;
+  @Column({ nullable: true })
+  phone: string;
+  @Column({ type: 'varchar', length: 16, default: PersonRole.RESIDENT })
+  role: PersonRole; // 户主/常住/租户/经营者/从业人员
+  @Column({ type: 'varchar', length: 16, default: PersonMoveStatus.REGISTERED })
+  moveStatus: PersonMoveStatus;
+  @Column({ nullable: true })
+  shelterId: string; // 实际入住安置点
+  @Column({ nullable: true })
+  shelterName: string; // 安置点名称快照（含投亲靠友等自找去向）
+  @Column({ type: 'date', nullable: true })
+  settledFrom: string; // 从哪天开始安置
+  @Column({ type: 'date', nullable: true })
+  settledTo: string; // 安置结束日期（销号准许返回/复营业后填写）
+  @Column({ default: false })
+  continueBusiness: boolean; // 现场核对：是否仍在继续经营
+  @Column({ type: 'simple-json', nullable: true })
+  photos: string[]; // 现场核对照片（人+安置点/封停现场）
+  @Column({ type: 'text', nullable: true })
+  remark: string;
+  @Column({ type: 'timestamptz' })
+  registeredAt: Date; // 建档登记时间
+  @Column({ type: 'timestamptz', nullable: true })
+  verifiedAt: Date; // 网格员最近一次现场核对时间
+  @Column({ nullable: true })
+  verifiedById: string;
+  @Column({ nullable: true })
+  verifiedByName: string;
+  @Column({ type: 'timestamptz', nullable: true })
+  returnedAt: Date; // 擅自返回时间
+  @Column({ type: 'timestamptz', nullable: true })
+  safeReturnedAt: Date; // 销号后准许安全返回时间
+}
+
+// ---------- 安置补助 / 经营损失补偿 ----------
+@Entity('allowance_records')
+export class AllowanceRecord {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+  @Column()
+  houseId: string;
+  @Column({ type: 'varchar', length: 24 })
+  type: AllowanceType;
+  @Column({ nullable: true })
+  personId: string; // 安置补助可关联清册人员；经营损失可关联经营者
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  amount: string; // 申请金额
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  approvedAmount: string; // 乡镇核定金额
+  @Column({ type: 'text', nullable: true })
+  basis: string; // 核算依据（人天×标准 / 停业天数×日损失等）
+  @Column({ type: 'simple-json', nullable: true })
+  proof: string[]; // 佐证材料
+  @Column({ type: 'varchar', length: 16, default: AllowanceStatus.APPLIED })
+  status: AllowanceStatus;
+  @Column({ type: 'text', nullable: true })
+  reviewComment: string;
+  @Column({ nullable: true })
+  reviewedById: string;
+  @Column({ type: 'timestamptz', nullable: true })
+  reviewedAt: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  paidAt: Date;
   @CreateDateColumn()
   createdAt: Date;
 }

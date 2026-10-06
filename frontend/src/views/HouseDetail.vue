@@ -15,6 +15,10 @@
             <el-tag :type="RISK[a.house.riskLevel].type" effect="dark" size="large">{{ RISK[a.house.riskLevel].label }}</el-tag>
             <el-tag :type="STATUS[a.house.status]?.type" size="large">{{ STATUS[a.house.status]?.label }}</el-tag>
             <el-tag v-if="a.house.stopUseConfirmed" type="danger" effect="plain">已封停</el-tag>
+            <el-tag v-if="a.roster?.state==='FULL'" type="success" effect="plain">人员已全部清退</el-tag>
+            <el-tag v-else-if="a.roster?.state==='PARTIAL'" type="danger" effect="plain">人员未清退 {{ a.roster.resettled }}/{{ a.roster.total }}</el-tag>
+            <el-tag v-else-if="a.roster?.state==='RETURNED'" type="danger" effect="plain">有人擅自返回</el-tag>
+            <el-tag v-if="a.house.resumeBusinessApproved" type="success" effect="plain">已准许复营业</el-tag>
           </div>
           <div class="h2">{{ a.house.township }} · {{ a.house.village }} · {{ a.house.address }}</div>
           <div class="h3">
@@ -51,8 +55,16 @@
           <tab-review :archive="a" @reload="load" />
         </el-tab-pane>
 
-        <el-tab-pane label="告知 · 停用 · 转移" name="notice">
+        <el-tab-pane label="告知 · 停用" name="notice">
           <tab-notice :archive="a" @reload="load" />
+        </el-tab-pane>
+
+        <el-tab-pane name="evac">
+          <template #label>
+            人员转移 · 复营业
+            <el-badge v-if="evacBadge" :value="evacBadge" class="tab-badge" type="danger" />
+          </template>
+          <tab-evacuation :archive="a" @reload="load" />
         </el-tab-pane>
 
         <el-tab-pane label="多方协商 · 异常" name="issues">
@@ -76,12 +88,13 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import http from '../api';
 import { RISK, STATUS, ISSUE_TYPES, ACTIVITY_KIND, fmtDate } from '../labels';
 import TabReview from '../components/TabReview.vue';
 import TabNotice from '../components/TabNotice.vue';
+import TabEvacuation from '../components/TabEvacuation.vue';
 import TabIssues from '../components/TabIssues.vue';
 import TabConstruction from '../components/TabConstruction.vue';
 import TabSubsidy from '../components/TabSubsidy.vue';
@@ -91,6 +104,13 @@ const route = useRoute();
 const a = ref({});
 const loading = ref(false);
 const tab = ref('timeline');
+const evacBadge = computed(() => {
+  const r = a.value.roster;
+  if (!r) return 0;
+  if (r.state === 'RETURNED') return '!';
+  if (r.state === 'PARTIAL') return r.total - r.resettled;
+  return 0;
+});
 
 function kindType(k) {
   return {
@@ -125,4 +145,5 @@ watch(() => route.params.id, load);
 .tl-title { font-weight:600; font-size:13.5px; }
 .tl-detail { color:#6b7888; font-size:12.5px; margin-top:4px; }
 .op { color:#9aa7b5; font-weight:400; font-size:12px; margin-left:6px; }
+.tab-badge { margin-left:4px; }
 </style>

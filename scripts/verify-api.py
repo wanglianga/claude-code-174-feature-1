@@ -20,7 +20,7 @@ def login(u):
 
 county = login('county1'); town1 = login('town1'); town2 = login('town2')
 town3 = login('town3'); grid1 = login('grid1'); grid3 = login('grid3')
-acceptor = login('acceptor1'); farmer2 = login('farmer2'); team = login('team1')
+grid2 = login('grid2'); acceptor = login('acceptor1'); farmer2 = login('farmer2'); team = login('team1')
 fails = []
 def check(name, cond, detail=''):
     print(('PASS' if cond else 'FAIL'), name, detail)
@@ -138,6 +138,140 @@ check('权限-乡镇不能销号', st == 403)
 # ---------- 无Token ----------
 st, d = req('GET', '/houses')
 check('权限-未登录被拒', st == 401)
+
+# ---------- G房屋：人员转移清册化（6登5离不得清退）+ 整改期间偷返同事件续办 + 补助/复营业闸口 ----------
+g = house_by_code('NF-YL-000007', county)
+arc_g = req('GET', f"/houses/{g['id']}/archive", county)[1]
+plan_g = arc_g['plans'][0]
+roster0 = arc_g['roster']
+check('G-登记6人仅5人离开状态为转移中', g['status'] == 'EVACUATING', g['status'])
+check('G-清册聚合6登5离1在场1继续经营',
+      roster0['registered'] == 6 and roster0['resettled'] == 5 and
+      roster0['stillOnSite'] == 1 and roster0['continuingBusiness'] == 1 and roster0['full'] is False,
+      str(roster0))
+check('G-未全员清退生成督办异常(非阻断)',
+      any(i['type'] == 'EVACUATION_INCOMPLETE' and not i['blocksWorkflow'] for i in arc_g['issues']))
+# 已离开人员必须有安置点/起始日/照片
+leaver = [p for p in arc_g['evacPersons'] if p['moveStatus'] == 'RESETTLED'][0]
+check('G-离开人员有安置点/起始日/照片', bool(leaver['shelterName'] and leaver['settledFrom'] and leaver['photos']))
+# 无照片/无安置点的核对被拒
+st, d = req('POST', f"/evacuation-persons/{leaver['id']}/verify", grid2,
+            {'moveStatus': 'RESETTLED', 'shelterName': 'x', 'settledFrom': '2026-10-01'})
+check('G-现场核对无照片被拒', st == 400 and '照片' in d['message'], d.get('message', '')[:50])
+
+# 开工/验收/销号/补助拨付全部停在对应环节
+st, d = req('POST', '/construction-plans', farmer2, {
+    'houseId': g['id'], 'teamId': [t for t in teamlist if t['qualified']][0]['id'],
+    'startDate': '2026-10-10', 'endDate': '2026-11-10',
+    'budgetItems': [{'name': '加固', 'qty': 1, 'unit': '项', 'unitPrice': 1000}]})
+check('G-未全员清退禁止开工', st == 400 and '清退' in d['message'], d.get('message', '')[:60])
+results_g = [{'itemId': it['id'], 'itemType': it['type'], 'result': 'PASS'} for it in plan_g['items']]
+st, d = req('POST', '/acceptances', acceptor, {'houseId': g['id'], 'itemResults': results_g})
+check('G-未全员清退禁止验收', st == 400 and '清退' in d['message'], d.get('message', '')[:60])
+st, d = req('POST', '/closes', county, {'houseId': g['id'], 'confirmedAllItems': True, 'confirmedStopUseLifted': True})
+check('G-未全员清退禁止销号', st in (400, 403) )
+approved_als = [a for a in arc_g['allowances'] if a['status'] == 'APPROVED']
+check('G-补助申请保留且已核定2笔', len(approved_als) == 2, str([(a['type'], a['status']) for a in arc_g['allowances']]))
+st, d = req('POST', f"/allowances/{approved_als[0]['id']}/pay", county)
+check('G-未清退/未销号禁止拨付补助', st == 400 and '清退' in d['message'], d.get('message', '')[:60])
+
+# 经营者周凯被劝离：6人全员现场确认离开
+zk = [p for p in arc_g['evacPersons'] if '周凯' in p['name']][0]
+st, d = req('POST', f"/evacuation-persons/{zk['id']}/verify", grid2, {
+    'moveStatus': 'RESETTLED', 'shelterName': '大岭村集中安置点',
+    'settledFrom': '2026-10-02', 'photos': ['/uploads/demo-g-zk-left.jpg'],
+    'continueBusiness': False, 'remark': '经再次劝离，饭馆停业并入住安置点'})
+check('G-6人全员核对后清册FULL', st in (200, 201) and d['summary']['full'] is True, str(d)[:80])
+g2info = req('GET', f"/houses/{g['id']}/archive", county)[1]
+check('G-全员清退后房屋状态EVACUATED', g2info['house']['status'] == 'EVACUATED', g2info['house']['status'])
+
+# 提交施工计划（需户主同意书——种子已登记；阻断异常检查：EVACUATION_INCOMPLETE 非阻断不拦截）
+st, d = req('POST', '/construction-plans', farmer2, {
+    'houseId': g['id'], 'teamId': [t for t in teamlist if t['qualified']][0]['id'],
+    'startDate': '2026-10-03', 'endDate': '2026-11-05',
+    'budgetItems': [
+        {'name': '加层拆除', 'spec': '', 'qty': 80, 'unit': '㎡', 'unitPrice': 120},
+        {'name': '商品混凝土', 'spec': 'C30', 'qty': 10, 'unit': 'm³', 'unitPrice': 480},
+    ]})
+check('G-全员清退后允许开工', st in (200, 201), str(d)[:100])
+for it in plan_g['items']:
+    req('POST', f"/rectification-items/{it['id']}/status", town2, {'status': 'DONE'})
+
+# 整改期间网格员复查：发现周凯偷偷回来继续经营 -> 同一事件续办
+st, d = req('POST', '/rechecks/during', grid2, {
+    'houseId': g['id'], 'foundReturn': True, 'foundOperating': True, 'foundOnSite': 1,
+    'personIds': [zk['id']], 'photos': ['/uploads/demo-g-sneak.jpg'],
+    'notes': '晚间复查发现饭馆开门营业，周凯在店内居住经营'})
+check('G-偷返经营现场核查登记', st in (200, 201) and d.get('foundViolation') is True, str(d)[:80])
+arc_g2 = req('GET', f"/houses/{g['id']}/archive", county)[1]
+check('G-偷返后状态REBOUND(同事件续办)', arc_g2['house']['status'] == 'REBOUND', arc_g2['house']['status'])
+check('G-生成偷返阻断异常', any(i['type'] == 'PERSON_RETURN' and i['blocksWorkflow'] for i in arc_g2['issues']))
+check('G-清册人员被置为擅自返回',
+      [p for p in arc_g2['evacPersons'] if p['id'] == zk['id']][0]['moveStatus'] == 'RETURNED')
+# 偷返期间拨付/验收仍被拒
+st, d = req('POST', '/acceptances', acceptor, {'houseId': g['id'], 'itemResults': results_g})
+check('G-偷返续办期间禁止验收', st == 400)
+
+# 未全员劝回时办结异常被拒
+ret_issue = [i for i in arc_g2['issues'] if i['type'] == 'PERSON_RETURN' and i['status'] != 'RESOLVED'][0]
+st, d = req('POST', f"/issues/{ret_issue['id']}/return-resolved", grid2,
+            {'resolution': '已劝返', 'personIds': []})
+check('G-未全员重新安置不得办结偷返', st == 400 and '重新安置' in d['message'], d.get('message', '')[:60])
+
+# 再次现场核对：周凯重新离开安置，办结续办异常
+st, d = req('POST', f"/issues/{ret_issue['id']}/return-resolved", grid2, {
+    'resolution': '联合市监、公安再次劝离，周凯当晚回到安置点，饭馆重新封停，村委加强夜巡',
+    'personIds': [zk['id']], 'shelterName': '大岭村集中安置点', 'settledFrom': '2026-10-06',
+    'photos': ['/uploads/demo-g-zk-back.jpg']})
+check('G-全员复核后可办结偷返', st in (200, 201), str(d)[:80])
+arc_g3 = req('GET', f"/houses/{g['id']}/archive", county)[1]
+check('G-办结后恢复EVACUATED(同一档案)', arc_g3['house']['status'] == 'EVACUATED', arc_g3['house']['status'])
+# 房屋档案仍是同一栋（未新建记录）
+same = req('GET', '/houses?q=NF-YL-000007', county)[1]['total']
+check('G-复查续办未新建房屋记录', same == 1, str(same))
+
+# 重新走验收→销号（同一事件第二轮）
+st, d = req('POST', '/acceptances', acceptor, {'houseId': g['id'], 'itemResults': results_g, 'comment': '复核合格'})
+check('G-二次验收通过', st in (200, 201), str(d)[:80])
+st, d = req('POST', '/closes', county, {'houseId': g['id'], 'confirmedAllItems': True, 'confirmedStopUseLifted': True})
+check('G-二次销号通过', st in (200, 201), str(d)[:80])
+
+# 销号后偷返复查（现场核查撤销已有效销号；旧销号不得继续有效）
+req('POST', '/rechecks/during', grid2, {
+    'houseId': g['id'], 'foundReturn': True, 'personIds': [zk['id']],
+    'photos': ['/uploads/demo-g-sneak2.jpg'], 'notes': '销号后又擅自返回经营'})
+arc_g4 = req('GET', f"/houses/{g['id']}/archive", county)[1]
+check('G-销号后偷返旧销号被撤销', arc_g4['closeValid'] is False and arc_g4['close']['revoked'] is True)
+st, d = req('POST', f"/allowances/{approved_als[0]['id']}/pay", county)
+check('G-旧销号撤销后补助停拨', st == 400, d.get('message', '')[:60])
+st, d = req('POST', f"/houses/{g['id']}/resume-business", town2, {})
+check('G-销号无效禁止复营业', st == 400 and '销号' in d['message'], d.get('message', '')[:60])
+# 劝返→办结→重新验收销号
+ret_issue2 = [i for i in req('GET', f"/houses/{g['id']}/archive", county)[1]['issues']
+              if i['type'] == 'PERSON_RETURN' and i['status'] != 'RESOLVED'][0]
+req('POST', f"/issues/{ret_issue2['id']}/return-resolved", grid2, {
+    'resolution': '再次劝返安置点，批评教育，恢复封停', 'personIds': [zk['id']],
+    'shelterName': '大岭村集中安置点', 'settledFrom': '2026-10-07', 'photos': ['/uploads/demo-g-zk-back2.jpg']})
+st, d = req('POST', '/acceptances', acceptor, {'houseId': g['id'], 'itemResults': results_g, 'comment': '再次复核合格'})
+check('G-续办后再次验收', st in (200, 201), str(d)[:80])
+st, d = req('POST', '/closes', county, {'houseId': g['id'], 'confirmedAllItems': True, 'confirmedStopUseLifted': True})
+check('G-续办后再次销号', st in (200, 201), str(d)[:80])
+# 有效销号 + 全员清退：补助可拨付、复营业须单独准许
+st, d = req('POST', f"/allowances/{approved_als[0]['id']}/pay", county)
+check('G-销号有效后补助允许拨付', st in (200, 201), str(d)[:80])
+st, d = req('POST', f"/allowances/{approved_als[1]['id']}/pay", county)
+check('G-经营损失补助允许拨付', st in (200, 201), str(d)[:80])
+arc_g5 = req('GET', f"/houses/{g['id']}/archive", county)[1]
+check('G-销号后尚未准许复营业', arc_g5['house']['resumeBusinessApproved'] is False)
+st, d = req('POST', f"/houses/{g['id']}/resume-business", town2, {'condition': '限一楼经营，每月巡查一次'})
+check('G-有效销号后准许复营业', st in (200, 201), str(d)[:80])
+st, d = req('POST', f"/houses/{g['id']}/resume-business", town2, {})
+check('G-复营业准许不可重复', st == 400)
+
+# 驾驶舱新增统计可读且数值合理
+db = req('GET', '/dashboard', county)[1]
+check('DASH-清册统计6登6离(G)计入', db['evacuation']['personsRegistered'] >= 6 and db['evacuation']['housesFullyCleared'] >= 1, str(db['evacuation']))
+check('DASH-安置/经营补助已拨付2笔', db['allowanceSummary']['paid'] >= 2, str(db['allowanceSummary']))
 
 print()
 print('FAILED:', fails if fails else 'NONE')
