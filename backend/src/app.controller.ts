@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -73,6 +74,70 @@ export class AppController {
   @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
   createEvacuation(@Body() body: any, @Req() req: any) {
     return this.svc.createEvacuation(req.user, body);
+  }
+
+  // ---------- 人员转移花名册（逐人现场核对）----------
+  @Post('houses/:id/evacuation-roster')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  initRoster(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.initPersonRoster(req.user, id, body || {});
+  }
+
+  @Post('evacuation-persons/:pid/verify')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  verifyPerson(@Param('pid') pid: string, @Body() body: any, @Req() req: any) {
+    return this.svc.verifyPerson(req.user, pid, body);
+  }
+
+  @Delete('evacuation-persons/:pid')
+  @Roles(UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  deletePerson(@Param('pid') pid: string, @Req() req: any) {
+    return this.svc.deletePerson(req.user, pid);
+  }
+
+  // ---------- 安置补助 ----------
+  @Post('houses/:id/aids')
+  @Roles(UserRole.FARMER, UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  submitAid(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.submitAid(req.user, id, body || {});
+  }
+
+  @Post('aids/:aidId/review')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  reviewAid(@Param('aidId') aidId: string, @Body() body: any, @Req() req: any) {
+    return this.svc.reviewAid(req.user, aidId, body);
+  }
+
+  @Post('aids/:aidId/pay')
+  @Roles(UserRole.COUNTY_ADMIN)
+  payAid(@Param('aidId') aidId: string, @Req() req: any) {
+    return this.svc.payAid(req.user, aidId);
+  }
+
+  // ---------- 经营损失 ----------
+  @Post('houses/:id/business-losses')
+  @Roles(UserRole.FARMER, UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  submitLoss(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.submitLoss(req.user, id, body || {});
+  }
+
+  @Post('business-losses/:lossId/review')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  reviewLoss(@Param('lossId') lossId: string, @Body() body: any, @Req() req: any) {
+    return this.svc.reviewLoss(req.user, lossId, body);
+  }
+
+  // ---------- 复营业核准 ----------
+  @Post('houses/:id/resumptions')
+  @Roles(UserRole.FARMER, UserRole.GRID_WORKER, UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  applyResumption(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.svc.applyResumption(req.user, id, body || {});
+  }
+
+  @Post('resumptions/:rid/review')
+  @Roles(UserRole.TOWNSHIP_REVIEWER, UserRole.COUNTY_ADMIN)
+  reviewResumption(@Param('rid') rid: string, @Body() body: any, @Req() req: any) {
+    return this.svc.reviewResumption(req.user, rid, body);
   }
 
   // ---------- 利益相关方 / 协商 / 异常 ----------

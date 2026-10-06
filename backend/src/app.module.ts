@@ -6,11 +6,14 @@ import {
   Acceptance,
   AcceptanceItemResult,
   BudgetItem,
+  BusinessLoss,
+  BusinessResumption,
   CloseRecord,
   ConstructionLog,
   ConstructionPlan,
   ConstructionTeam,
   Consultation,
+  EvacuationPerson,
   EvacuationRecord,
   FamilyProfile,
   House,
@@ -20,6 +23,7 @@ import {
   NoticeRecord,
   RectificationItem,
   RecheckRecord,
+  ResettlementAid,
   ReviewPlan,
   Stakeholder,
   SubsidyApplication,
@@ -33,9 +37,9 @@ import { SeedService } from './seed.service';
 
 const entities = [
   User, House, Inspection, ReviewPlan, RectificationItem, NoticeRecord, EvacuationRecord,
-  Stakeholder, Consultation, IssueRecord, FamilyProfile, ConstructionTeam, ConstructionPlan,
-  BudgetItem, SubsidyApplication, ConstructionLog, Acceptance, AcceptanceItemResult,
-  CloseRecord, RecheckRecord, HouseActivity,
+  EvacuationPerson, Stakeholder, Consultation, IssueRecord, FamilyProfile, ConstructionTeam,
+  ConstructionPlan, BudgetItem, SubsidyApplication, ConstructionLog, Acceptance, AcceptanceItemResult,
+  CloseRecord, RecheckRecord, HouseActivity, ResettlementAid, BusinessLoss, BusinessResumption,
 ];
 
 @Module({

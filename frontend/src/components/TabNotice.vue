@@ -19,12 +19,19 @@
       <el-col :span="12">
         <el-card shadow="never">
           <template #header>人员转移与临时安置</template>
+          <el-alert v-if="rollup.registered" :type="rollup.cleared ? 'success' : 'error'" :closable="false" show-icon style="margin-bottom:8px"
+            :title="rollup.cleared
+              ? `花名册 ${rollup.registered} 人已全部确认离开并安置（已清退）`
+              : `花名册 ${rollup.registered} 人，仅确认 ${rollup.relocated} 人离开（仍在 ${rollup.staying}、偷返 ${rollup.sneakBack}）——未清退`" />
+          <el-button type="primary" size="small" style="margin-bottom:8px" @click="$emit('navigate','evac')">
+            打开人员转移花名册逐人核对（安置点/起始日/照片）→
+          </el-button>
           <div v-for="e in archive.evacuations||[]" :key="e.id" class="ev">
-            <el-tag type="danger">转移{{ e.residents }}人</el-tag> → {{ e.destination }}
+            <el-tag type="danger">本批转移{{ e.residents }}人</el-tag> → {{ e.destination }}
             <el-tag size="small" :type="e.allowReturn?'success':'warning'" style="margin-left:6px">{{ e.allowReturn?'已准许返回':'未准许返回' }}</el-tag>
             <div class="sub">{{ fmtDate(e.settledAt) }} 安置；{{ e.remark }}</div>
           </div>
-          <el-empty v-if="!archive.evacuations?.length" description="暂无转移记录" :image-size="60" />
+          <el-empty v-if="!archive.evacuations?.length" description="暂无批次转移记录" :image-size="60" />
           <el-tag v-if="archive.house?.stopUseConfirmed" type="danger" effect="plain">房屋已确认封停/暂停使用</el-tag>
         </el-card>
       </el-col>
@@ -67,8 +74,8 @@
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="evac.remark" /></el-form-item>
         <el-form-item>
-          <el-button type="danger" @click="doEvac">登记人员转移安置</el-button>
-          <span class="hint">转移人员在验收销号前系统不允许返回；告知未签收时停用/转移均被拦截。</span>
+          <el-button type="danger" @click="doEvac">登记人员转移批次</el-button>
+          <span class="hint">批次人数不等于全员清退；须到“人员转移花名册”逐人现场核对（安置点、起始日、照片），全员离开才算已清退，否则开工/验收/销号/拨付一律拦截。</span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -86,6 +93,7 @@ const emit = defineEmits(['reload']);
 const auth = useAuthStore();
 const canOperate = ['GRID_WORKER', 'TOWNSHIP_REVIEWER', 'COUNTY_ADMIN'].includes(auth.role);
 const latestPlan = computed(() => props.archive.plans?.[0]);
+const rollup = computed(() => props.archive.evacRollup || { registered: 0, relocated: 0, staying: 0, sneakBack: 0, returned: 0, cleared: false });
 
 const notice = reactive({ method: '现场告知', notifiedTo: [], acknowledged: true, content: '' });
 const evac = reactive({ residents: props.archive.house?.residents || 0, destination: '村级安置点', remark: '' });

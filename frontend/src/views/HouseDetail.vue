@@ -15,6 +15,9 @@
             <el-tag :type="RISK[a.house.riskLevel].type" effect="dark" size="large">{{ RISK[a.house.riskLevel].label }}</el-tag>
             <el-tag :type="STATUS[a.house.status]?.type" size="large">{{ STATUS[a.house.status]?.label }}</el-tag>
             <el-tag v-if="a.house.stopUseConfirmed" type="danger" effect="plain">已封停</el-tag>
+            <el-tag v-if="a.evacRollup?.registered && !a.evacRollup.cleared" type="danger" effect="dark">未清退 {{ a.evacRollup.relocated }}/{{ a.evacRollup.registered }}</el-tag>
+            <el-tag v-if="a.evacRollup?.cleared && a.evacRollup.registered" type="success" effect="plain">已全员清退</el-tag>
+            <el-tag v-if="a.closeInvalidated" type="danger" effect="dark">原销号已作废</el-tag>
           </div>
           <div class="h2">{{ a.house.township }} · {{ a.house.village }} · {{ a.house.address }}</div>
           <div class="h3">
@@ -31,6 +34,10 @@
       </div>
       <el-alert v-if="a.blockingIssues?.length" type="error" show-icon :closable="false" style="margin-top:12px"
         :title="`存在 ${a.blockingIssues.length} 件阻断性问题未办结，相关环节被冻结：${a.blockingIssues.map(x=>ISSUE_TYPES[x.type]).join('、')}`" />
+      <el-alert v-if="a.evacRollup?.registered && !a.evacRollup.cleared" type="error" show-icon :closable="false" style="margin-top:12px"
+        :title="`人员未全员清退：花名册登记 ${a.evacRollup.registered} 人，现场仅确认 ${a.evacRollup.relocated} 人离开（仍在 ${a.evacRollup.staying}、偷返 ${a.evacRollup.sneakBack}）。不得标记已清退，开工/验收/销号与补助拨付一律拦截。`" />
+      <el-alert v-if="a.closeInvalidated" type="warning" show-icon :closable="false" style="margin-top:12px"
+        title="该房屋原有销号结果已被复查作废（偷返/反弹），后续处置接着本档案原事件进行，不新建记录；补助拨付与复营业须以重新销号为准。" />
     </el-card>
 
     <el-card shadow="never" style="margin-top:12px">
@@ -52,7 +59,11 @@
         </el-tab-pane>
 
         <el-tab-pane label="告知 · 停用 · 转移" name="notice">
-          <tab-notice :archive="a" @reload="load" />
+          <tab-notice :archive="a" @reload="load" @navigate="tab = $event" />
+        </el-tab-pane>
+
+        <el-tab-pane label="人员转移花名册" name="evac">
+          <tab-evacuation :archive="a" @reload="load" />
         </el-tab-pane>
 
         <el-tab-pane label="多方协商 · 异常" name="issues">
@@ -65,6 +76,10 @@
 
         <el-tab-pane label="补助" name="subsidy">
           <tab-subsidy :archive="a" @reload="load" />
+        </el-tab-pane>
+
+        <el-tab-pane label="安置补助 · 经营 · 复业" name="business">
+          <tab-business :archive="a" @reload="load" />
         </el-tab-pane>
 
         <el-tab-pane label="验收 · 销号 · 复查" name="accept">
@@ -82,9 +97,11 @@ import http from '../api';
 import { RISK, STATUS, ISSUE_TYPES, ACTIVITY_KIND, fmtDate } from '../labels';
 import TabReview from '../components/TabReview.vue';
 import TabNotice from '../components/TabNotice.vue';
+import TabEvacuation from '../components/TabEvacuation.vue';
 import TabIssues from '../components/TabIssues.vue';
 import TabConstruction from '../components/TabConstruction.vue';
 import TabSubsidy from '../components/TabSubsidy.vue';
+import TabBusiness from '../components/TabBusiness.vue';
 import TabAcceptance from '../components/TabAcceptance.vue';
 
 const route = useRoute();

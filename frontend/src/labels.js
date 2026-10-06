@@ -43,6 +43,43 @@ export const ISSUE_TYPES = {
   TENANT_REFUSE: '租户不愿搬离',
   ACCEPTANCE_FAIL: '验收不通过',
   REBOUND: '复查发现问题反弹',
+  SNEAK_RETURN: '整改期间擅自返回/偷返经营',
+};
+
+export const PERSON_CATEGORY = {
+  OWNER: '户主/家庭成员',
+  RESIDENT: '常住人员',
+  TENANT: '租户',
+  OPERATOR: '经营者',
+  WORKER: '从业人员',
+};
+
+export const PERSON_STATUS = {
+  REGISTERED: { label: '待现场核对', type: 'info' },
+  RELOCATED: { label: '已确认离开并安置', type: 'success' },
+  STAYING: { label: '仍在房屋内', type: 'danger' },
+  SNEAK_BACK: { label: '擅自返回', type: 'danger' },
+  RETURNED: { label: '准许后安全返回', type: '' },
+};
+
+export const AID_STATUS = {
+  APPLIED: { label: '待乡镇核定', type: 'warning' },
+  APPROVED: { label: '已核定·待销号拨付', type: 'primary' },
+  PAID: { label: '已拨付', type: 'success' },
+  REJECTED: { label: '不予核定', type: 'danger' },
+};
+
+export const LOSS_STATUS = {
+  REPORTED: { label: '待乡镇核定', type: 'warning' },
+  VERIFIED: { label: '已核定', type: 'success' },
+  REJECTED: { label: '不予认定', type: 'danger' },
+};
+
+export const RESUMPTION_STATUS = {
+  NONE: { label: '未申请', type: 'info' },
+  APPLIED: { label: '待乡镇核准', type: 'warning' },
+  APPROVED: { label: '已核准复营业', type: 'success' },
+  REJECTED: { label: '未核准', type: 'danger' },
 };
 
 export const ISSUE_STATUS = {

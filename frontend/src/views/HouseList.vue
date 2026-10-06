@@ -32,8 +32,12 @@
       <el-table-column label="风险" width="100">
         <template #default="{ row }"><el-tag size="small" :type="RISK[row.riskLevel].type">{{ RISK[row.riskLevel].label }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="状态" width="110">
-        <template #default="{ row }"><el-tag size="small" :type="STATUS[row.status]?.type">{{ STATUS[row.status]?.label }}</el-tag></template>
+      <el-table-column label="状态" width="150">
+        <template #default="{ row }">
+          <el-tag size="small" :type="STATUS[row.status]?.type">{{ STATUS[row.status]?.label }}</el-tag>
+          <el-tag v-if="row.registeredCount > 0 && !row.evictionCleared" size="small" type="danger" effect="dark" style="margin-left:2px">未清退</el-tag>
+          <el-tag v-else-if="row.evictionCleared" size="small" type="success" effect="plain" style="margin-left:2px">已清退</el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="风险依据" min-width="260">
         <template #default="{ row }">

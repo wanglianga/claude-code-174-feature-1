@@ -31,6 +31,38 @@
       </el-table-column>
     </el-table>
 
+    <!-- 人员转移清退口径 -->
+    <el-card shadow="never" style="margin-bottom:14px">
+      <template #header>人员转移清退口径（逐人花名册现场核对，防止“数字清退”）</template>
+      <el-row :gutter="12">
+        <el-col :span="5"><div class="kpi"><div class="num">{{ d.evacuationSummary?.requiredHouses || 0 }}</div><div class="k">须紧急转移房屋</div></div></el-col>
+        <el-col :span="5"><div class="kpi ok"><div class="num">{{ d.evacuationSummary?.clearedHouses || 0 }}</div><div class="k">全员清退房屋</div></div></el-col>
+        <el-col :span="5"><div class="kpi danger"><div class="num">{{ d.evacuationSummary?.partialHouses || 0 }}</div><div class="k">未全员清退/未建花名册</div></div></el-col>
+        <el-col :span="5"><div class="kpi"><div class="num">{{ d.evacuationSummary?.personsRelocated || 0 }}</div><div class="k">现场确认已离开（人）</div></div></el-col>
+        <el-col :span="4"><div class="kpi danger"><div class="num">{{ (d.evacuationSummary?.personsStaying||0)+(d.evacuationSummary?.personsSneakBack||0) }}</div><div class="k">仍在+偷返（人）</div></div></el-col>
+      </el-row>
+      <el-alert
+        v-if="partialRows.length"
+        :title="`登记人数≠清退人数：以下 ${partialRows.length} 栋要求紧急转移但花名册未全员清退，系统已冻结其开工/验收/销号/拨付`"
+        type="error" show-icon :closable="false" style="margin:12px 0 8px" />
+      <el-table v-if="partialRows.length" :data="partialRows" size="small" border>
+        <el-table-column prop="code" label="档案号" width="150" />
+        <el-table-column prop="township" label="乡镇" width="100" />
+        <el-table-column prop="village" label="村" width="120" />
+        <el-table-column prop="ownerName" label="户主/经营者" width="120" />
+        <el-table-column label="清退进度" width="180">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.registered ? 'danger' : 'info'">
+              {{ row.registered ? `登记${row.registered}人·离开${row.relocated}人·未清${row.unresolved}人` : '未建立花名册' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }"><el-button link type="primary" @click="$router.push(`/houses/${row.id}`)">进花名册核对</el-button></template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-row :gutter="14">
       <el-col :span="8">
         <el-card shadow="never">
@@ -60,8 +92,12 @@
             <el-descriptions-item label="已驳回">{{ d.subsidySummary?.rejected }}</el-descriptions-item>
             <el-descriptions-item label="已发放">{{ d.subsidySummary?.paid }} 户</el-descriptions-item>
             <el-descriptions-item label="累计发放金额"><b class="money">¥{{ (d.subsidySummary?.paidAmount || 0).toLocaleString() }}</b></el-descriptions-item>
+            <el-descriptions-item label="安置补助 待核定/已核定">{{ (d.aidSummary?.applied||0) }} / {{ (d.aidSummary?.approved||0) }} 户</el-descriptions-item>
+            <el-descriptions-item label="安置补助已拨付">{{ d.aidSummary?.paid || 0 }} 户 · ¥{{ (d.aidSummary?.paidAmount || 0).toLocaleString() }}</el-descriptions-item>
+            <el-descriptions-item label="经营损失 申报/核定">{{ (d.businessSummary?.lossReported||0) }} / {{ (d.businessSummary?.lossVerified||0) }}</el-descriptions-item>
+            <el-descriptions-item label="复营业 待核准/已核准">{{ (d.businessSummary?.resumptionApplied||0) }} / {{ (d.businessSummary?.resumptionApproved||0) }}</el-descriptions-item>
           </el-descriptions>
-          <div class="section-hint">补助仅在验收销号后发放，防止“带病拨款”；存在资格争议未办结的不得批准。</div>
+          <div class="section-hint">整改补助与安置补助均在有效销号后拨付；复营业须凭有效销号申请，销号作废则核准一并失效。</div>
         </el-card>
       </el-col>
     </el-row>
@@ -127,6 +163,7 @@ const loading = ref(false);
 const pct = (v, t) => (t ? Math.round((v / t) * 100) : 0);
 const townshipRows = computed(() => Object.entries(d.value.byTownship || {}).map(([township, v]) => ({ township, ...v })));
 const issueRows = computed(() => Object.entries(d.value.issuesByType || {}).map(([k, v]) => ({ k, ...v })));
+const partialRows = computed(() => d.value.evacuationSummary?.partialEvacHouses || []);
 
 onMounted(async () => {
   loading.value = true;

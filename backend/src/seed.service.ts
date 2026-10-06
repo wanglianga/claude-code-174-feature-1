@@ -136,6 +136,22 @@ export class SeedService implements OnApplicationBootstrap {
         houseId, residents: 5, destination: '溪口村部安置点',
         remark: '2户投亲，3人居村部安置点，发放生活物资',
       });
+      // 逐人花名册：5人全部现场确认离开并安置
+      const rosterA = await this.svc.initPersonRoster(grid1, houseId, {
+        persons: [
+          { name: '王德福', category: 'OWNER' },
+          { name: '王秀英（王德福妻子）', category: 'RESIDENT' },
+          { name: '刘军（二层租户）', category: 'TENANT' },
+          { name: '刘梅（刘军妻子）', category: 'TENANT' },
+          { name: '刘小军（刘军之子）', category: 'TENANT' },
+        ],
+      });
+      for (const p of rosterA.persons) {
+        await this.svc.verifyPerson(grid1, p.id, {
+          evacStatus: 'RELOCATED', destination: '溪口村部安置点', settledFrom: this.dateStr(-12),
+          photos: ['/uploads/demo-evac.jpg'], remark: '网格员现场逐人核对，安置点签到',
+        });
+      }
       await this.svc.upsertFamily(houseId, {
         difficultyType: DifficultyType.LOW_INCOME,
         difficultyProof: ['/uploads/demo-dibao.jpg'],
@@ -415,6 +431,171 @@ export class SeedService implements OnApplicationBootstrap {
       await this.svc.createRecheck(grid3, {
         houseId, result: AcceptanceResult.FAIL, wallCrack: 2,
         reboundNotes: '复查发现原加固墙体旁出现新贯通裂缝，疑似相邻新建房施工影响，问题反弹',
+      });
+    }
+
+    // ---------- 房屋G：紧急转移，花名册6人仅确认5人离开，经营者仍在偷偷营业 ----------
+    {
+      const insp = await this.svc.createInspection(grid3, {
+        code: 'NF-QS-000007',
+        township: '青山镇', village: '临江村', address: '临江村渡口旁3号',
+        ownerName: '何大勇', ownerPhone: '13811110007',
+        buildYear: 2008, floors: 3, usage: '快餐店+自住+出租', isBusiness: true, isRented: true,
+        wallCrack: 1, roofLeak: 0, foundationSettlement: 2, residents: 6,
+        notes: '一层快餐店人员密集，房屋明显倾斜、地基严重沉降，店主夜间仍在店内经营留宿',
+      });
+      const houseId = insp.house.id;
+      const plan = await this.svc.createReview(town3, {
+        inspectionId: insp.inspection.id,
+        decision: RiskLevel.EVACUATE,
+        requirement: '立即全员转移、关停快餐店，加固地基和承重墙，验收销号前任何人不得返回、不得恢复经营。',
+        deadline: this.dateStr(20),
+        items: [
+          { type: 'REINFORCE_WALL', description: '地基补强并加固一层承重墙' },
+          { type: 'TEMP_RESETTLEMENT', description: '6名人员（含店主、帮工、租户）全部临时安置' },
+          { type: 'EVICT_TENANTS', description: '关停快餐店、清退2户租户和留宿帮工' },
+          { type: 'SET_WARNING', description: '设置围挡危房警示' },
+        ],
+      });
+      await this.svc.createNotice(grid3, {
+        houseId, method: '书面送达', notifiedTo: ['户主何大勇', '经营者何大勇', '租户2户'], acknowledged: true,
+        content: '评定为紧急转移等级，须全员撤离，验收销号前禁止返回和经营',
+      });
+      await this.svc.createEvacuation(grid3, {
+        houseId, residents: 5, destination: '青山镇集中安置点',
+        remark: '网格员现场核对：6人中5人已撤离，店主何大勇声称看店不肯走',
+      });
+      const rosterG = await this.svc.initPersonRoster(grid3, houseId, {
+        persons: [
+          { name: '何大勇（店主）', category: 'OWNER' },
+          { name: '何母陈桂英', category: 'RESIDENT' },
+          { name: '租户赵磊', category: 'TENANT' },
+          { name: '租户孙倩', category: 'TENANT' },
+          { name: '帮工李姐', category: 'OPERATOR' },
+          { name: '学徒小陈', category: 'WORKER' },
+        ],
+      });
+      const relocatedNames = ['何母陈桂英', '租户赵磊', '租户孙倩', '帮工李姐', '学徒小陈'];
+      for (const p of rosterG.persons) {
+        if (relocatedNames.includes(p.name)) {
+          await this.svc.verifyPerson(grid3, p.id, {
+            evacStatus: 'RELOCATED', destination: '青山镇集中安置点', settledFrom: this.dateStr(-6),
+            photos: ['/uploads/demo-evac-g.jpg'], remark: '安置点签到，网格员现场拍照核对',
+          });
+        }
+      }
+      const owner = rosterG.persons.find((p) => p.name === '何大勇（店主）');
+      await this.svc.verifyPerson(grid3, owner.id, {
+        evacStatus: 'STAYING', stillOperating: true,
+        photos: ['/uploads/demo-still-open.jpg'],
+        remark: '复查现场快餐店仍在夜间营业，店主住店内，未离开',
+      });
+      await this.svc.upsertFamily(houseId, {
+        difficultyType: DifficultyType.LOW_INCOME,
+        difficultyProof: ['/uploads/demo-dibao-g.jpg'],
+        ownershipProof: ['/uploads/demo-quanshu-g.jpg'],
+        ownerConsent: true,
+        membersNote: '店主以小店为唯一收入，抗拒关停；家庭低保',
+      });
+      // 补助申请保留（资格校验因未全员清退不通过，停留补充材料，不进入批准/拨付）
+      await this.svc.submitSubsidy(farmer3, houseId, { amount: 10000 });
+      // 安置补助：5人×12天人天，乡镇可核定，但拨付停在销号前
+      const aidG = await this.svc.submitAid(grid3, houseId, { personDays: 60 });
+      await this.svc.reviewAid(town3, aidG.aid.id, { approved: true, comment: '5人已安置，核定60人天，资金销号后拨付' });
+      void plan;
+    }
+
+    // ---------- 房屋H：已销号，经营者偷返被复查发现，旧销号作废、同事件重开 ----------
+    {
+      const insp = await this.svc.createInspection(grid2, {
+        code: 'NF-YL-000008',
+        township: '云岭乡', village: '岭脚村', address: '岭脚村老街12号',
+        ownerName: '周小凤', ownerPhone: '13811110008',
+        buildYear: 2001, floors: 2, usage: '家常菜馆+自住', isBusiness: true,
+        wallCrack: 2, roofLeak: 1, foundationSettlement: 0, residents: 4,
+        notes: '一层餐馆承重墙斜向贯通裂缝，评定紧急转移',
+      });
+      const houseId = insp.house.id;
+      const plan = await this.svc.createReview(town2, {
+        inspectionId: insp.inspection.id,
+        decision: RiskLevel.EVACUATE,
+        requirement: '全员转移、停业，加固承重墙，销号前禁止返回；复营业须另行申请核准。',
+        deadline: this.dateStr(15),
+        items: [
+          { type: 'REINFORCE_WALL', description: '一层承重墙钢筋网抹面加固' },
+          { type: 'TEMP_RESETTLEMENT', description: '4名人员临时安置' },
+          { type: 'EVICT_TENANTS', description: '关停餐馆、清退留宿帮工与租户' },
+        ],
+      });
+      await this.svc.createNotice(grid2, {
+        houseId, method: '书面送达', notifiedTo: ['户主周小凤', '帮工', '租户'], acknowledged: true,
+      });
+      await this.svc.createEvacuation(grid2, {
+        houseId, residents: 4, destination: '投亲靠友/乡安置点',
+      });
+      const rosterH = await this.svc.initPersonRoster(grid2, houseId, {
+        persons: [
+          { name: '周小凤', category: 'OWNER' },
+          { name: '周小凤丈夫吴强', category: 'RESIDENT' },
+          { name: '帮工王姐', category: 'WORKER' },
+          { name: '租户小吴', category: 'TENANT' },
+        ],
+      });
+      for (const p of rosterH.persons) {
+        await this.svc.verifyPerson(grid2, p.id, {
+          evacStatus: 'RELOCATED', destination: '云岭乡集中安置点', settledFrom: this.dateStr(-20),
+          photos: ['/uploads/demo-evac-h.jpg'], remark: '现场核对已撤离',
+        });
+      }
+      await this.svc.upsertFamily(houseId, {
+        difficultyType: DifficultyType.MONITORING,
+        difficultyProof: ['/uploads/demo-jianche-h.jpg'],
+        ownershipProof: ['/uploads/demo-quanshu-h.jpg'],
+        ownerConsent: true,
+        membersNote: '防止返贫监测户，家庭主要收入为餐馆经营',
+      });
+      await this.svc.submitConstructionPlan(farmer2, {
+        houseId, teamId: teamA.id, startDate: this.dateStr(-18), endDate: this.dateStr(-3),
+        budgetItems: [
+          { name: '钢筋', spec: 'HRB400 12mm', qty: 1.6, unit: '吨', unitPrice: 4600 },
+          { name: '商品混凝土', spec: 'C30', qty: 9, unit: 'm³', unitPrice: 480 },
+        ],
+      });
+      // 经营损失申报（停业期间）
+      await this.svc.submitLoss(grid2, houseId, {
+        businessName: '小凤家常菜馆', operatorName: '周小凤',
+        monthlyRevenue: 28000, closedDays: 20, claimedAmount: 12000,
+        proofDocs: ['/uploads/demo-loss-h.jpg'],
+      });
+      const sub = await this.svc.submitSubsidy(farmer2, houseId, { amount: 15000 });
+      await this.svc.reviewSubsidy(town2, sub.application.id, { approved: true, comment: '监测户，材料齐全，同意补助，销号后发放' });
+      await this.svc.addConstructionLog(teamUser, {
+        houseId, stage: '墙体加固', content: '钢筋、混凝土进场，规格与预算一致',
+        materialName: '钢筋', materialSpec: 'HRB400 12mm', progressPercent: 50,
+        itemId: plan.items.find((i) => i.type === 'REINFORCE_WALL').id, itemStatus: ItemStatus.IN_PROGRESS,
+      });
+      await this.svc.addConstructionLog(teamUser, {
+        houseId, stage: '墙体加固', content: '承重墙加固完成并养护到位',
+        materialName: '商品混凝土', materialSpec: 'C30', progressPercent: 100,
+        itemId: plan.items.find((i) => i.type === 'REINFORCE_WALL').id, itemStatus: ItemStatus.DONE,
+      });
+      await this.svc.setItemStatus(town2, plan.items.find((i) => i.type === 'TEMP_RESETTLEMENT').id, ItemStatus.DONE);
+      await this.svc.setItemStatus(town2, plan.items.find((i) => i.type === 'EVICT_TENANTS').id, ItemStatus.DONE);
+      await this.svc.createAcceptance(acceptor, {
+        houseId, comment: '承重墙加固合格，验收时人员均在安置点',
+        itemResults: plan.items.map((it) => ({ itemId: it.id, itemType: it.type, result: AcceptanceResult.PASS, note: '合格' })),
+      });
+      await this.svc.closeHouse(county, {
+        houseId, confirmedAllItems: true, confirmedStopUseLifted: true,
+        remark: '整改完成，同意销号；复营业须另行核准',
+      });
+      // 复查：周小凤整改/销号后不久偷偷回店重新开张
+      await this.svc.createRecheck(grid2, {
+        houseId, result: AcceptanceResult.FAIL, sneakReturn: true,
+        personIds: [rosterH.persons.find((p) => p.name === '周小凤').id],
+        operatingDetected: true,
+        photos: ['/uploads/demo-sneak-h.jpg'],
+        reboundNotes: '夜间复查发现家常菜馆重新开张，周小凤搬回店内居住并经营，现场有食客',
       });
     }
 
